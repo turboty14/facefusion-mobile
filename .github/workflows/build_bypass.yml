@@ -1,4 +1,4 @@
-name: Compilar APK con Bypass
+name: Build FaceFusion Dev (No Content Gate)
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Download official release APK
+      - name: Download official release APK (for native libraries)
         run: |
           curl -L -o official.apk \
             https://github.com/AbrahamPaulJ/facefusion-mobile/releases/download/v0.9.41/facefusion-mobile-0.9.41-release.apk
@@ -26,59 +26,25 @@ jobs:
         run: |
           mkdir -p prebuilt-native/arm64-v8a
           unzip -j official.apk "lib/arm64-v8a/*" -d prebuilt-native/arm64-v8a/
-          echo "Extracted files:"
           ls -la prebuilt-native/arm64-v8a/
 
-      - name: Apply ContentGate bypass patch
+      - name: Remove ContentGate (this enables the official Dev / no-gate build)
         run: |
-          python3 - << 'EOF'
-          target_path = "work/android/app/src/main/java/com/facefusion/mobile/ContentGate.kt"
-          
-          with open(target_path, "r", encoding="utf-8") as f:
-              content = f.read()
-          
-          bypass_helpers = """
-              const val ENABLED = false
-          
-              private fun bypassResult() = Result(
-                  verdict = Verdict.ALLOW,
-                  score = 0f,
-                  sampled = 0,
-                  flagged = 0,
-                  detail = "content gate disabled"
-              )
-          """
-          
-          content = content.replace("object ContentGate {", f"object ContentGate {{\n{bypass_helpers}", 1)
-          
-          content = content.replace(
-              "fun checkImage(bitmap: Bitmap): Result {",
-              "fun checkImage(bitmap: Bitmap): Result {\n        if (!ENABLED) return bypassResult()"
-          )
-          
-          content = content.replace(
-              "fun checkVideo(file: File): Result {",
-              "fun checkVideo(file: File): Result {\n        if (!ENABLED) return bypassResult()"
-          )
-          
-          with open(target_path, "w", encoding="utf-8") as f:
-              f.write(content)
-          
-          print("ContentGate patch applied successfully")
-          EOF
+          rm -f work/android/app/src/main/java/com/facefusion/mobile/ContentGate.kt
+          echo "ContentGate.kt deleted — this will build as FaceFusion Dev (no content gate)"
 
       - name: Make gradlew executable
         run: chmod +x work/android/gradlew
 
-      - name: Build APK with prebuilt natives
+      - name: Build APK
         working-directory: work/android
         run: |
           ./gradlew assembleDebug \
             -PprebuiltNativeDir=$GITHUB_WORKSPACE/prebuilt-native \
             -x qnnStage
 
-      - name: Upload patched APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: facefusion-mobile-bypassed
+          name: facefusion-dev-no-gate
           path: work/android/app/build/outputs/apk/debug/*.apk
