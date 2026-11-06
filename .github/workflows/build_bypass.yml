@@ -19,15 +19,14 @@ jobs:
 
       - name: Download official release APK
         run: |
-          # Download the latest official release
           curl -L -o official.apk \
             https://github.com/AbrahamPaulJ/facefusion-mobile/releases/download/v0.9.41/facefusion-mobile-0.9.41-release.apk
 
       - name: Extract native libraries
         run: |
           mkdir -p prebuilt-native/arm64-v8a
-          # Extract the .so files from the APK
           unzip -j official.apk "lib/arm64-v8a/*" -d prebuilt-native/arm64-v8a/
+          echo "Extracted files:"
           ls -la prebuilt-native/arm64-v8a/
 
       - name: Apply ContentGate bypass patch
@@ -38,7 +37,6 @@ jobs:
           with open(target_path, "r", encoding="utf-8") as f:
               content = f.read()
           
-          # Add ENABLED flag and bypass method
           bypass_helpers = """
               const val ENABLED = false
           
@@ -53,13 +51,11 @@ jobs:
           
           content = content.replace("object ContentGate {", f"object ContentGate {{\n{bypass_helpers}", 1)
           
-          # Early return in checkImage
           content = content.replace(
               "fun checkImage(bitmap: Bitmap): Result {",
               "fun checkImage(bitmap: Bitmap): Result {\n        if (!ENABLED) return bypassResult()"
           )
           
-          # Early return in checkVideo
           content = content.replace(
               "fun checkVideo(file: File): Result {",
               "fun checkVideo(file: File): Result {\n        if (!ENABLED) return bypassResult()"
@@ -77,7 +73,9 @@ jobs:
       - name: Build APK with prebuilt natives
         working-directory: work/android
         run: |
-          ./gradlew assembleDebug -PprebuiltNativeDir=$GITHUB_WORKSPACE/prebuilt-native
+          ./gradlew assembleDebug \
+            -PprebuiltNativeDir=$GITHUB_WORKSPACE/prebuilt-native \
+            -x qnnStage
 
       - name: Upload patched APK
         uses: actions/upload-artifact@v4
